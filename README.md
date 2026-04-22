@@ -44,6 +44,276 @@ gated-mint-cli --keypair '[12,34,56,...]'
 
 ## Commands
 
+The CLI now exposes the broader Token ACL mint lifecycle commands from the main ACL client in addition to the gate-list helpers already in this example crate.
+
+### `create-config`
+
+Creates the Token ACL mint config PDA for a mint and optionally stores the gating program in the mint metadata.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> create-config --mint <MINT> [--gating-program <PROGRAM_ID>] [--freeze-authority <BASE58_OR_BYTES>]
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint address to configure.
+- `--gating-program <PROGRAM_ID>`
+  Optional gating program pubkey to store on the mint config and in mint metadata.
+- `--freeze-authority <BASE58_OR_BYTES>`
+  Optional freeze-authority signer in the same formats supported by `--keypair`.
+
+Outputs:
+
+- Prints `mint_config=<MINT_CONFIG_PDA>`.
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+Example:
+
+```bash
+cargo run -- \
+  --keypair '<KEYPAIR>' \
+  create-config \
+  --mint <MINT> \
+  --gating-program <PROGRAM_ID>
+```
+
+### `delete-config`
+
+Deletes a Token ACL mint config PDA and sends reclaimed lamports to the payer or an explicit receiver.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> delete-config --mint <MINT> [--receiver <RECEIVER>]
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint whose config PDA should be deleted.
+- `--receiver <RECEIVER>`
+  Optional lamport receiver. Defaults to the payer.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `set-authority`
+
+Updates the authority on an existing mint config.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> set-authority --mint <MINT> --new-authority <NEW_AUTHORITY>
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint whose config authority should be updated.
+- `--new-authority <NEW_AUTHORITY>`
+  New authority pubkey.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `set-gating-program`
+
+Updates the gating program on an existing mint config and mirrors the value into mint metadata.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> set-gating-program --mint <MINT> --new-gating-program <NEW_GATING_PROGRAM>
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint whose config should be updated.
+- `--new-gating-program <NEW_GATING_PROGRAM>`
+  New gating program pubkey.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `set-instructions`
+
+Toggles permissionless thaw and freeze support on the mint config.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> set-instructions --mint <MINT> <--enable-thaw|--disable-thaw> <--enable-freeze|--disable-freeze>
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint whose permissionless instruction flags should be updated.
+- `--enable-thaw` or `--disable-thaw`
+  Required thaw toggle.
+- `--enable-freeze` or `--disable-freeze`
+  Required freeze toggle.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+Example:
+
+```bash
+cargo run -- \
+  --keypair '<KEYPAIR>' \
+  set-instructions \
+  --mint <MINT> \
+  --enable-thaw \
+  --disable-freeze
+```
+
+### `freeze`
+
+Freezes a token account using the configured ACL authority path.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> freeze --token-account <TOKEN_ACCOUNT>
+```
+
+Inputs:
+
+- `--token-account <TOKEN_ACCOUNT>`
+  Token-2022 account to freeze.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `freeze-permissionless`
+
+Builds and sends the permissionless freeze path either from an existing token account or from a mint-owner pair.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> freeze-permissionless [--token-account <TOKEN_ACCOUNT> | (--mint <MINT> --owner <OWNER>)]
+```
+
+Inputs:
+
+- `--token-account <TOKEN_ACCOUNT>`
+  Existing token account to freeze.
+- `--mint <MINT>`
+  Mint address. Use with `--owner` when the token account should be derived as the ATA.
+- `--owner <OWNER>`
+  Token-account owner. Use with `--mint`.
+
+Outputs:
+
+- Prints:
+  `mint=<MINT>`
+  `token_account=<TOKEN_ACCOUNT>`
+  `owner=<OWNER>`
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `thaw`
+
+Thaws a token account using the configured ACL authority path.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> thaw --token-account <TOKEN_ACCOUNT>
+```
+
+Inputs:
+
+- `--token-account <TOKEN_ACCOUNT>`
+  Token-2022 account to thaw.
+
+Outputs:
+
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+### `thaw-permissionless`
+
+Builds and sends the permissionless thaw path either from an existing token account or from a mint-owner pair.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> thaw-permissionless [--token-account <TOKEN_ACCOUNT> | (--mint <MINT> --owner <OWNER>)]
+```
+
+Inputs:
+
+- `--token-account <TOKEN_ACCOUNT>`
+  Existing token account to thaw.
+- `--mint <MINT>`
+  Mint address. Use with `--owner` when the token account should be derived as the ATA.
+- `--owner <OWNER>`
+  Token-account owner. Use with `--mint`.
+
+Outputs:
+
+- Prints:
+  `mint=<MINT>`
+  `token_account=<TOKEN_ACCOUNT>`
+  `owner=<OWNER>`
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+Example:
+
+```bash
+cargo run -- \
+  --keypair '<KEYPAIR>' \
+  thaw-permissionless \
+  --mint <MINT> \
+  --owner <OWNER>
+```
+
+### `create-ata-and-thaw-permissionless`
+
+Creates the Token-2022 associated token account for an owner and thaws it in one flow.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> create-ata-and-thaw-permissionless --mint <MINT> --owner <OWNER>
+```
+
+Inputs:
+
+- `--mint <MINT>`
+  Mint address.
+- `--owner <OWNER>`
+  Owner whose ATA should be created and thawed.
+
+Outputs:
+
+- Prints:
+  `mint=<MINT>`
+  `token_account=<TOKEN_ACCOUNT>`
+  `owner=<OWNER>`
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
 ### `create-mint`
 
 Creates a Token-2022 mint configured for Token ACL gate usage.
@@ -97,7 +367,7 @@ cargo run -- \
 
 ### `mint`
 
-Current behavior: this command name is historical. It currently thaws a token account; it does not mint new tokens.
+Current behavior: this command name is historical and preserved for compatibility. It currently thaws a token account; prefer the explicit `thaw` command for new usage.
 
 ```bash
 gated-mint-cli --keypair <KEYPAIR> mint --mint <MINT> --owner <OWNER> --token-account <TOKEN_ACCOUNT>
@@ -172,6 +442,43 @@ cargo run -- \
   close-wallet-entries \
   --list-config <LIST_CONFIG> \
   --batch-size 8
+```
+
+### `create-list`
+
+Creates a Token ACL Gate list config PDA for the current signer.
+
+```bash
+gated-mint-cli --keypair <KEYPAIR> create-list [--mode <MODE>] [--seed <SEED>]
+```
+
+Inputs:
+
+- `--mode <MODE>`
+  List mode.
+  Possible values: `allow`, `allow-all-eoas`, `block`
+  Default: `allow`
+- `--seed <SEED>`
+  Optional deterministic seed pubkey. If omitted, the CLI generates a fresh random seed.
+
+Outputs:
+
+- Prints:
+  `list_config=<LIST_CONFIG>`
+  `seed=<SEED>`
+  `mode=<MODE>`
+- With `--simulate`:
+  Prints `simulation=<...>`.
+- Without `--simulate`:
+  Prints `transaction=<explorer-url>`.
+
+Example:
+
+```bash
+cargo run -- \
+  --keypair '<KEYPAIR>' \
+  create-list \
+  --mode allow
 ```
 
 ### `delete-list`
