@@ -449,11 +449,13 @@ cargo run -- \
 Creates a Token ACL Gate list config PDA for the current signer.
 
 ```bash
-gated-mint-cli --keypair <KEYPAIR> create-list [--mode <MODE>] [--seed <SEED>]
+gated-mint-cli --keypair <KEYPAIR> create-list --mint <MINT> [--mode <MODE>] [--seed <SEED>]
 ```
 
 Inputs:
 
+- `--mint <MINT>`
+  Mint whose Token ACL config and extra-metas PDAs should be wired to this new list.
 - `--mode <MODE>`
   List mode.
   Possible values: `allow`, `allow-all-eoas`, `block`
@@ -464,13 +466,17 @@ Inputs:
 Outputs:
 
 - Prints:
+  `mint=<MINT>`
+  `mint_config=<MINT_CONFIG>`
   `list_config=<LIST_CONFIG>`
+  `thaw_extra_metas=<THAW_EXTRA_METAS>`
+  `freeze_extra_metas=<FREEZE_EXTRA_METAS>`
   `seed=<SEED>`
   `mode=<MODE>`
 - With `--simulate`:
   Prints `simulation=<...>`.
 - Without `--simulate`:
-  Prints `transaction=<explorer-url>`.
+  Sends one transaction containing `CreateList`, `SetupExtraMetas`, and `SetupFreezeExtraMetas`, then prints `transaction=<explorer-url>`.
 
 Example:
 
@@ -478,6 +484,7 @@ Example:
 cargo run -- \
   --keypair '<KEYPAIR>' \
   create-list \
+  --mint <MINT> \
   --mode allow
 ```
 

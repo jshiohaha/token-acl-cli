@@ -3,35 +3,40 @@ use clap::Args;
 use solana_keypair::Signer;
 use solana_pubkey::Pubkey;
 use solana_transaction::Transaction;
-use spl_token_2022_interface::ID as TOKEN_2022_PROGRAM_ID;
+use token_acl_gate_client::{accounts::WalletEntry, instructions::AddWalletBuilder};
 
 use crate::{cli::AppContext, rpc};
 
 #[derive(Debug, Args)]
-pub struct MintArgs {
+pub struct CreateWalletEntryArgs {
     #[arg(long)]
-    pub mint: Pubkey,
+    pub list_config: Pubkey,
     #[arg(long)]
-    pub owner: Pubkey,
-    #[arg(long)]
-    pub token_account: Pubkey,
+    pub wallet: Pubkey,
 }
 
-pub async fn run(ctx: &AppContext, args: MintArgs) -> Result<()> {
-    let thaw_ix = spl_token_2022_interface::instruction::thaw_account(
-        &TOKEN_2022_PROGRAM_ID,
-        &args.token_account,
-        &args.mint,
-        &ctx.payer.pubkey(),
-        &[],
-    )?;
+pub async fn run(ctx: &AppContext, args: CreateWalletEntryArgs) -> Result<()> {
+    let authority = ctx.payer.pubkey();
+    let wallet_entry = WalletEntry::find_pda(&args.list_config, &args.wallet).0;
+
+    let mut builder = AddWalletBuilder::new();
+    builder
+        .authority(authority)
+        .payer(authority)
+        .list_config(args.list_config)
+        .wallet(args.wallet)
+        .wallet_entry(wallet_entry);
 
     let transaction = Transaction::new_signed_with_payer(
-        &[thaw_ix],
-        Some(&ctx.payer.pubkey()),
+        &[builder.instruction()],
+        Some(&authority),
         &[ctx.payer.as_ref()],
         ctx.rpc_client.get_latest_blockhash().await?,
     );
+
+    println!("list_config={}", args.list_config);
+    println!("wallet={}", args.wallet);
+    println!("wallet_entry={wallet_entry}");
 
     if ctx.shared.simulate {
         let simulation_response = ctx
@@ -47,7 +52,6 @@ pub async fn run(ctx: &AppContext, args: MintArgs) -> Result<()> {
         .rpc_client
         .send_and_confirm_transaction(&transaction)
         .await?;
-    println!("owner={}", args.owner);
     println!(
         "transaction={}",
         rpc::explorer_tx_url(&ctx.shared.rpc_url, &signature.to_string())

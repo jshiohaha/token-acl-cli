@@ -126,6 +126,10 @@ pub async fn run_create_config(ctx: &AppContext, args: CreateConfigArgs) -> Resu
         .map(Signer::pubkey)
         .unwrap_or_else(|| ctx.payer.pubkey());
 
+    println!("payer: {:?}", ctx.payer.pubkey());
+    println!("mint: {:?}", args.mint);
+    println!("authority: {:?}", authority);
+
     let create_config_ix = token_acl_client::instructions::CreateConfigBuilder::new()
         .authority(authority)
         .payer(ctx.payer.pubkey())
@@ -134,19 +138,12 @@ pub async fn run_create_config(ctx: &AppContext, args: CreateConfigArgs) -> Resu
         .gating_program(args.gating_program.unwrap_or_default())
         .instruction();
 
-    let mut instructions = vec![create_config_ix];
-
-    if let Some(gating_program) = args.gating_program {
-        maybe_push_metadata_resize_and_set_ixs(ctx, &args.mint, gating_program, &mut instructions)
-            .await?;
-    }
-
     let mut signers: Vec<&Keypair> = vec![ctx.payer.as_ref()];
     if let Some(freeze_authority) = freeze_authority.as_ref() {
         signers.push(freeze_authority);
     }
 
-    let transaction = signed_transaction(ctx, &instructions, &signers).await?;
+    let transaction = signed_transaction(ctx, &[create_config_ix], &signers).await?;
     execute_transaction(ctx, &transaction, false).await?;
     println!("mint_config={config}");
 
@@ -196,6 +193,7 @@ pub async fn run_set_gating_program(ctx: &AppContext, args: SetGatingProgramArgs
     maybe_push_metadata_resize_and_set_ixs(
         ctx,
         &args.mint,
+        &ctx.payer.pubkey(),
         args.new_gating_program,
         &mut instructions,
     )
@@ -385,6 +383,7 @@ pub async fn run_create_ata_and_thaw_permissionless(
 async fn maybe_push_metadata_resize_and_set_ixs(
     ctx: &AppContext,
     mint: &Pubkey,
+    metadata_authority: &Pubkey,
     gating_program: Pubkey,
     instructions: &mut Vec<solana_instruction::Instruction>,
 ) -> Result<()> {
@@ -420,7 +419,7 @@ async fn maybe_push_metadata_resize_and_set_ixs(
 
     instructions.push(set_mint_tacl_metadata_ix(
         mint,
-        &ctx.payer.pubkey(),
+        metadata_authority,
         &gating_program,
     ));
 

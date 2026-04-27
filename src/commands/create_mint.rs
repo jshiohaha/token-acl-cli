@@ -5,7 +5,7 @@ use solana_pubkey::Pubkey;
 use solana_transaction::Transaction;
 use spl_token_2022_interface::{
     ID as TOKEN_2022_PROGRAM_ID,
-    extension::{ExtensionType, default_account_state, metadata_pointer, transfer_fee},
+    extension::{ExtensionType, default_account_state, metadata_pointer, pausable, transfer_fee},
     state::AccountState,
 };
 use token_acl_client::set_mint_tacl_metadata_ix;
@@ -28,12 +28,18 @@ pub struct CreateMintArgs {
         default_value_t = token_acl_gate_client::programs::TOKEN_ACL_GATE_PROGRAM_ID.to_bytes().into()
     )]
     pub gate_program_id: Pubkey,
-    #[arg(long, default_value_t = 100)]
+    #[arg(long, default_value_t = 10)]
     pub transfer_fee_basis_points: u16,
-    #[arg(long, default_value_t = 100_000_000)]
+    #[arg(long, default_value_t = 1_000_000_000_000)]
     pub maximum_transfer_fee: u64,
     #[arg(long, default_value_t = 6)]
     pub decimals: u8,
+    #[arg(long)]
+    pub freeze_authority: Option<Pubkey>,
+    #[arg(long)]
+    pub pause_authority: Option<Pubkey>,
+    #[arg(long)]
+    pub permanent_delegate: Option<Pubkey>,
 }
 
 fn metadata_with_acl_attribute(
@@ -58,6 +64,8 @@ async fn initialize_mint_ixs(
     metadata_authority: &Pubkey,
     transfer_fee_config_authority: Option<&Pubkey>,
     withdraw_withheld_authority: Option<&Pubkey>,
+    pause_authority: &Pubkey,
+    permanent_delegate: &Pubkey,
     transfer_fee_basis_points: u16,
     maximum_transfer_fee: u64,
     decimals: u8,
@@ -67,6 +75,8 @@ async fn initialize_mint_ixs(
     let fixed_extensions = &[
         ExtensionType::DefaultAccountState,
         ExtensionType::TransferFeeConfig,
+        ExtensionType::Pausable,
+        ExtensionType::PermanentDelegate,
         ExtensionType::MetadataPointer,
     ];
 
@@ -99,6 +109,12 @@ async fn initialize_mint_ixs(
             withdraw_withheld_authority,
             transfer_fee_basis_points,
             maximum_transfer_fee,
+        )?,
+        pausable::instruction::initialize(&TOKEN_2022_PROGRAM_ID, mint, pause_authority)?,
+        spl_token_2022_interface::instruction::initialize_permanent_delegate(
+            &TOKEN_2022_PROGRAM_ID,
+            mint,
+            permanent_delegate,
         )?,
         metadata_pointer::instruction::initialize(
             &TOKEN_2022_PROGRAM_ID,
@@ -141,6 +157,11 @@ pub async fn run(ctx: &AppContext, args: CreateMintArgs) -> Result<()> {
 
     let authority = ctx.payer.clone();
     let mint_kp = Keypair::new();
+    let freeze_authority = args.freeze_authority.unwrap_or_else(|| authority.pubkey());
+    let pause_authority = args.pause_authority.unwrap_or_else(|| authority.pubkey());
+    let permanent_delegate = args
+        .permanent_delegate
+        .unwrap_or_else(|| authority.pubkey());
 
     println!("mint={}", mint_kp.pubkey());
 
@@ -155,12 +176,14 @@ pub async fn run(ctx: &AppContext, args: CreateMintArgs) -> Result<()> {
     let mint_ixs = initialize_mint_ixs(
         ctx,
         &authority.pubkey(),
-        Some(&authority.pubkey()),
+        Some(&freeze_authority),
         &token_metadata,
         &authority.pubkey(),
         &authority.pubkey(),
         Some(&authority.pubkey()),
         Some(&authority.pubkey()),
+        &pause_authority,
+        &permanent_delegate,
         args.transfer_fee_basis_points,
         args.maximum_transfer_fee,
         args.decimals,

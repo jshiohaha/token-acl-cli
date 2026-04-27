@@ -25,7 +25,7 @@ spl-associated-token-account = "^8"
 
 token-acl-interface = { version = "0.2.2" }
 token-acl-client = { version = "0.2.2", features = ["fetch"] }
-token-acl-gate-client = { version = "0.2.0" }
+token-acl-gate-client = { path = "../../token-acl-gate/sdk/rust" }
 
 tokio = { version = "1.0", features = ["full"] }
 serde = "1.0"

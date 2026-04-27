@@ -8,8 +8,6 @@ use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 
 use crate::{commands, signer};
 
-const DEFAULT_RPC_URL: &str = "https://orca.rpcpool.com/ae9a156f6bdd344c8267465eb432";
-
 #[derive(Debug, Parser)]
 #[command(name = "gated-mint-cli")]
 #[command(about = "Manage gated Token-2022 mints")]
@@ -22,7 +20,7 @@ pub struct Cli {
 
 #[derive(Debug, Args, Clone)]
 pub struct SharedArgs {
-    #[arg(long, default_value = DEFAULT_RPC_URL)]
+    #[arg(long, default_value = "http://127.0.0.1:8899")]
     pub rpc_url: String,
     #[arg(
         long,
@@ -47,6 +45,7 @@ pub enum Command {
     ThawPermissionless(commands::acl::PermissionlessTokenAccountArgs),
     CreateAtaAndThawPermissionless(commands::acl::CreateAtaAndThawPermissionlessArgs),
     CloseWalletEntries(commands::close_wallet_entries::CloseWalletEntriesArgs),
+    CreateWalletEntry(commands::create_wallet_entry::CreateWalletEntryArgs),
     CreateList(commands::create_list::CreateListArgs),
     CreateMint(commands::create_mint::CreateMintArgs),
     DeleteList(commands::delete_list::DeleteListArgs),
@@ -97,6 +96,7 @@ pub async fn run() -> Result<()> {
             commands::acl::run_create_ata_and_thaw_permissionless(&ctx, args).await
         }
         Command::CloseWalletEntries(args) => commands::close_wallet_entries::run(&ctx, args).await,
+        Command::CreateWalletEntry(args) => commands::create_wallet_entry::run(&ctx, args).await,
         Command::CreateList(args) => commands::create_list::run(&ctx, args).await,
         Command::CreateMint(args) => commands::create_mint::run(&ctx, args).await,
         Command::DeleteList(args) => commands::delete_list::run(&ctx, args).await,

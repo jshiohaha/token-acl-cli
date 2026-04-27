@@ -1,7 +1,6 @@
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use solana_account_decoder_client_types::UiAccountEncoding;
-use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Signer;
 use solana_pubkey::Pubkey;
 use solana_rpc_client_api::{
@@ -15,6 +14,8 @@ use token_acl_gate_client::{
 };
 
 use crate::{cli::AppContext, rpc};
+
+const WALLET_ENTRY_ACCOUNT_SIZE: u64 = 65;
 
 #[derive(Debug, Args)]
 pub struct CloseWalletEntriesArgs {
@@ -33,10 +34,10 @@ pub async fn run(ctx: &AppContext, args: CloseWalletEntriesArgs) -> Result<()> {
     let accounts = ctx
         .rpc_client
         .get_program_accounts_with_config(
-            &into_app_pubkey(token_acl_gate_client::programs::TOKEN_ACL_GATE_PROGRAM_ID),
+            &token_acl_gate_client::programs::TOKEN_ACL_GATE_PROGRAM_ID,
             RpcProgramAccountsConfig {
                 filters: Some(vec![
-                    RpcFilterType::DataSize(WalletEntry::LEN as u64),
+                    RpcFilterType::DataSize(WALLET_ENTRY_ACCOUNT_SIZE),
                     RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
                         0,
                         vec![WALLET_ENTRY_DISCRIMINATOR],
@@ -54,31 +55,39 @@ pub async fn run(ctx: &AppContext, args: CloseWalletEntriesArgs) -> Result<()> {
             },
         )
         .await
-        .map_err(|err| anyhow!("failed to fetch wallet entries for list {}: {err}", args.list_config))?;
+        .map_err(|err| {
+            anyhow!(
+                "failed to fetch wallet entries for list {}: {err}",
+                args.list_config
+            )
+        })?;
 
-    let gate_list_config = into_gate_pubkey(args.list_config);
     let instructions = accounts
         .iter()
         .map(|(wallet_entry_address, account)| {
-            let decoded = WalletEntry::from_bytes(&account.data)
-                .map_err(|err| anyhow!("failed to decode wallet entry {}: {err}", wallet_entry_address))?;
+            let decoded = WalletEntry::from_bytes(&account.data).map_err(|err| {
+                anyhow!(
+                    "failed to decode wallet entry {}: {err}",
+                    wallet_entry_address
+                )
+            })?;
 
-            if into_app_pubkey(decoded.list_config) != args.list_config {
+            if decoded.list_config != args.list_config {
                 bail!(
                     "wallet entry {} belongs to {}, expected {}",
                     wallet_entry_address,
-                    into_app_pubkey(decoded.list_config),
+                    decoded.list_config,
                     args.list_config
                 );
             }
 
             let mut builder = RemoveWalletBuilder::new();
             builder
-                .authority(into_gate_pubkey(ctx.payer.pubkey()))
-                .list_config(gate_list_config)
-                .wallet_entry(into_gate_pubkey(*wallet_entry_address));
+                .authority(ctx.payer.pubkey())
+                .list_config(args.list_config)
+                .wallet_entry(*wallet_entry_address);
 
-            Ok::<Instruction, anyhow::Error>(into_app_instruction(builder.instruction()))
+            Ok::<_, anyhow::Error>(builder.instruction())
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -97,7 +106,11 @@ pub async fn run(ctx: &AppContext, args: CloseWalletEntriesArgs) -> Result<()> {
                 &[ctx.payer.as_ref()],
                 ctx.rpc_client.get_latest_blockhash().await?,
             );
-            let simulation_response = ctx.rpc_client.simulate_transaction(&transaction).await?.value;
+            let simulation_response = ctx
+                .rpc_client
+                .simulate_transaction(&transaction)
+                .await?
+                .value;
             println!("batch={} simulation={simulation_response:?}", index + 1);
         }
 
@@ -123,28 +136,4 @@ pub async fn run(ctx: &AppContext, args: CloseWalletEntriesArgs) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn into_gate_pubkey(pubkey: Pubkey) -> solana_pubkey_v2::Pubkey {
-    pubkey.to_bytes().into()
-}
-
-fn into_app_pubkey(pubkey: solana_pubkey_v2::Pubkey) -> Pubkey {
-    pubkey.to_bytes().into()
-}
-
-fn into_app_instruction(ix: solana_instruction_v2::Instruction) -> Instruction {
-    Instruction {
-        program_id: into_app_pubkey(ix.program_id),
-        accounts: ix
-            .accounts
-            .into_iter()
-            .map(|meta| AccountMeta {
-                pubkey: into_app_pubkey(meta.pubkey),
-                is_signer: meta.is_signer,
-                is_writable: meta.is_writable,
-            })
-            .collect(),
-        data: ix.data,
-    }
 }

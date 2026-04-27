@@ -1,10 +1,20 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Args, ValueEnum};
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::{Keypair, Signer};
 use solana_pubkey::Pubkey;
 use solana_transaction::Transaction;
-use token_acl_gate_client::{accounts::ListConfig, instructions::CreateListBuilder, types::Mode};
+use token_acl_gate_client::{
+    accounts::ListConfig,
+    instructions::{
+        // SetupFreezeExtraMetasBuilder, SETUP_FREEZE_EXTRA_METAS_DISCRIMINATOR
+        CreateListBuilder,
+        SETUP_EXTRA_METAS_DISCRIMINATOR,
+        SetupExtraMetasBuilder,
+    },
+    programs::TOKEN_ACL_GATE_PROGRAM_ID,
+    types::Mode,
+};
 
 use crate::{cli::AppContext, rpc};
 
@@ -27,6 +37,8 @@ impl From<ListModeArg> for Mode {
 
 #[derive(Debug, Args)]
 pub struct CreateListArgs {
+    #[arg(long)]
+    pub mint: Pubkey,
     #[arg(long, value_enum, default_value_t = ListModeArg::Allow)]
     pub mode: ListModeArg,
     #[arg(long)]
@@ -34,34 +46,69 @@ pub struct CreateListArgs {
 }
 
 pub async fn run(ctx: &AppContext, args: CreateListArgs) -> Result<()> {
-    let authority = into_app_pubkey(ctx.payer.pubkey().to_bytes().into());
-    let seed = args
-        .seed
-        .unwrap_or_else(|| into_app_pubkey(Keypair::new().pubkey().to_bytes().into()));
-    let list_config = into_app_pubkey(ListConfig::find_pda(&into_gate_pubkey(authority), &into_gate_pubkey(seed)).0);
+    let authority = ctx.payer.pubkey();
+    let seed = args.seed.unwrap_or_else(|| Keypair::new().pubkey());
+    let list_config = ListConfig::find_pda(&authority, &seed).0;
+    let mint_config = token_acl_client::accounts::MintConfig::find_pda(&args.mint).0;
+    let gate_program_id = TOKEN_ACL_GATE_PROGRAM_ID;
+    let thaw_extra_metas =
+        token_acl_interface::get_thaw_extra_account_metas_address(&args.mint, &gate_program_id);
+    // let freeze_extra_metas =
+    //     token_acl_interface::get_freeze_extra_account_metas_address(&args.mint, &gate_program_id);
 
-    let mut builder = CreateListBuilder::new();
-    builder
-        .authority(into_gate_pubkey(authority))
-        .payer(into_gate_pubkey(authority))
-        .seed(into_gate_pubkey(seed))
+    let mut create_list_builder = CreateListBuilder::new();
+    create_list_builder
+        .authority(authority)
+        .payer(authority)
+        .seed(seed)
         .mode(args.mode.into())
-        .list_config(into_gate_pubkey(list_config));
-    let instruction = into_app_instruction(builder.instruction());
+        .list_config(list_config);
+
+    let remaining_accounts = [AccountMeta::new_readonly(list_config, false)];
+
+    let mut setup_thaw_builder = SetupExtraMetasBuilder::new();
+    setup_thaw_builder
+        .authority(authority)
+        .payer(authority)
+        .token_acl_mint_config(mint_config)
+        .mint(args.mint)
+        .extra_metas(thaw_extra_metas)
+        .add_remaining_accounts(&remaining_accounts);
+
+    // let mut setup_freeze_builder = SetupFreezeExtraMetasBuilder::new();
+    // setup_freeze_builder
+    //     .authority(authority)
+    //     .payer(authority)
+    //     .token_acl_mint_config(mint_config)
+    //     .mint(args.mint)
+    //     .extra_metas(freeze_extra_metas)
+    //     .add_remaining_accounts(&remaining_accounts);
+
+    let create_list_ix = create_list_builder.instruction();
+    let setup_thaw_ix = setup_thaw_builder.instruction();
+    // let setup_freeze_ix = setup_freeze_builder.instruction();
 
     let transaction = Transaction::new_signed_with_payer(
-        &[instruction],
+        &[create_list_ix, setup_thaw_ix], // setup_freeze_ix
         Some(&authority),
         &[ctx.payer.as_ref()],
         ctx.rpc_client.get_latest_blockhash().await?,
     );
 
+    println!("mint={}", args.mint);
+    println!("mint_config={mint_config}");
     println!("list_config={list_config}");
-    println!("seed={seed}");
+    println!("thaw_extra_metas={thaw_extra_metas}");
+    // println!("freeze_extra_metas={freeze_extra_metas}");
+    println!("seed={:?}", seed.to_string());
     println!("mode={:?}", args.mode);
 
     if ctx.shared.simulate {
-        let simulation_response = ctx.rpc_client.simulate_transaction(&transaction).await?.value;
+        let simulation_response = ctx
+            .rpc_client
+            .simulate_transaction(&transaction)
+            .await?
+            .value;
         println!("simulation={simulation_response:?}");
         return Ok(());
     }
@@ -76,28 +123,4 @@ pub async fn run(ctx: &AppContext, args: CreateListArgs) -> Result<()> {
     );
 
     Ok(())
-}
-
-fn into_gate_pubkey(pubkey: Pubkey) -> solana_pubkey_v2::Pubkey {
-    pubkey.to_bytes().into()
-}
-
-fn into_app_pubkey(pubkey: solana_pubkey_v2::Pubkey) -> Pubkey {
-    pubkey.to_bytes().into()
-}
-
-fn into_app_instruction(ix: solana_instruction_v2::Instruction) -> Instruction {
-    Instruction {
-        program_id: into_app_pubkey(ix.program_id),
-        accounts: ix
-            .accounts
-            .into_iter()
-            .map(|meta| AccountMeta {
-                pubkey: into_app_pubkey(meta.pubkey),
-                is_signer: meta.is_signer,
-                is_writable: meta.is_writable,
-            })
-            .collect(),
-        data: ix.data,
-    }
 }

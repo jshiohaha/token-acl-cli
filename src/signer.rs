@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use solana_keypair::Keypair;
 
 pub fn parse_keypair_arg(value: &str) -> Result<Keypair> {
