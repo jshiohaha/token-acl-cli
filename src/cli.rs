@@ -5,6 +5,7 @@ use clap::{Args, Parser, Subcommand};
 use solana_commitment_config::CommitmentConfig;
 use solana_keypair::Keypair;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
+use bincode::serialize;
 
 use crate::{commands, signer};
 
@@ -34,6 +35,8 @@ pub struct SharedArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    CreateAlt(commands::alt::CreateAltArgs),
+    ExtendAlt(commands::alt::ExtendAltArgs),
     CreateConfig(commands::acl::CreateConfigArgs),
     DeleteConfig(commands::acl::DeleteConfigArgs),
     SetAuthority(commands::acl::SetAuthorityArgs),
@@ -45,6 +48,7 @@ pub enum Command {
     ThawPermissionless(commands::acl::PermissionlessTokenAccountArgs),
     CreateAtaAndThawPermissionless(commands::acl::CreateAtaAndThawPermissionlessArgs),
     CloseWalletEntries(commands::close_wallet_entries::CloseWalletEntriesArgs),
+    CloseWalletEntry(commands::close_wallet_entry::CloseWalletEntryArgs),
     CreateWalletEntry(commands::create_wallet_entry::CreateWalletEntryArgs),
     CreateList(commands::create_list::CreateListArgs),
     CreateMint(commands::create_mint::CreateMintArgs),
@@ -79,6 +83,8 @@ pub async fn run() -> Result<()> {
     let ctx = AppContext::new(cli.shared)?;
 
     match cli.command {
+        Command::CreateAlt(args) => commands::alt::run_create(&ctx, args).await,
+        Command::ExtendAlt(args) => commands::alt::run_extend(&ctx, args).await,
         Command::CreateConfig(args) => commands::acl::run_create_config(&ctx, args).await,
         Command::DeleteConfig(args) => commands::acl::run_delete_config(&ctx, args).await,
         Command::SetAuthority(args) => commands::acl::run_set_authority(&ctx, args).await,
@@ -96,6 +102,7 @@ pub async fn run() -> Result<()> {
             commands::acl::run_create_ata_and_thaw_permissionless(&ctx, args).await
         }
         Command::CloseWalletEntries(args) => commands::close_wallet_entries::run(&ctx, args).await,
+        Command::CloseWalletEntry(args) => commands::close_wallet_entry::run(&ctx, args).await,
         Command::CreateWalletEntry(args) => commands::create_wallet_entry::run(&ctx, args).await,
         Command::CreateList(args) => commands::create_list::run(&ctx, args).await,
         Command::CreateMint(args) => commands::create_mint::run(&ctx, args).await,
